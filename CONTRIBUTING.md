@@ -37,15 +37,24 @@ git checkout -b fix/short-description
 Install dependencies:
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install -e ".[dev]"
 ```
 
 Run the local checks before opening a Pull Request:
 
 ```bash
 python -m py_compile main.py
-python main.py main.py --language en --strict --fail-on-empty --output generated-docs.md
-python main.py main.py --format json --language en --strict --fail-on-empty --output generated-docs.json
+python -m pytest
+python-code-doc-generator --version
+python-code-doc-generator main.py --language en --strict --fail-on-empty --output generated-docs.md
+python-code-doc-generator main.py --format json --language en --strict --fail-on-empty --output generated-docs.json
+```
+
+If you only want to verify package installation without development tools, run:
+
+```bash
+python -m pip install -e .
+python-code-doc-generator --version
 ```
 
 ## Pull Request Guidelines
@@ -68,6 +77,17 @@ Keep Pull Requests focused. A small, well-explained PR is easier to review and m
 - Preserve deterministic output for CI/CD usage.
 - Update README examples when behavior changes.
 - Keep error messages actionable for users.
+- Keep package metadata in `pyproject.toml` accurate when changing the public CLI.
+
+## Test Coverage Expectations
+
+Changes to parser behavior should update tests under `tests/test_parser.py`.
+
+Changes to Markdown or JSON output should update tests under `tests/test_renderers.py`.
+
+Changes to CLI flags, exit codes, or output-file behavior should update tests under `tests/test_cli.py`.
+
+The GitHub Actions workflow runs on Python 3.10, 3.11, and 3.12. A Pull Request should be considered ready for review only after these checks pass.
 
 ## Good First Contributions
 

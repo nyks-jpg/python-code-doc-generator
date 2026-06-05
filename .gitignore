@@ -16,3 +16,5 @@ build/
 *.egg-info/
 generated-docs.md
 generated-docs.json
+.eggs/
+pip-wheel-metadata/

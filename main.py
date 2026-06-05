@@ -59,7 +59,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     """Parse command-line arguments."""
 
     parser = argparse.ArgumentParser(
-        prog="python main.py",
+        prog="python-code-doc-generator",
         description=(
             "Scan Python files and generate function-level documentation "
             "from static code analysis."

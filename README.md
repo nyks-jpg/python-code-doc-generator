@@ -1,5 +1,7 @@
 # python-code-doc-generator
 
+[![Python Test](https://github.com/nyks-jpg/python-code-doc-generator/actions/workflows/python-test.yml/badge.svg)](https://github.com/nyks-jpg/python-code-doc-generator/actions/workflows/python-test.yml)
+
 ![Proje Çıktısı](screenshot.png)
 
 **python-code-doc-generator** is a lightweight, CI-friendly command-line tool that scans Python source files, extracts function-level metadata, and generates clean Markdown or JSON documentation from static analysis.
@@ -35,10 +37,16 @@ The first version intentionally uses only the Python standard library. It relies
 
 ## Installation
 
-Clone the repository:
+Install from PyPI after the package is published:
 
 ```bash
-git clone https://github.com/your-org/python-code-doc-generator.git
+python -m pip install python-code-doc-generator
+```
+
+For local development, clone the repository:
+
+```bash
+git clone https://github.com/nyks-jpg/python-code-doc-generator.git
 cd python-code-doc-generator
 ```
 
@@ -56,56 +64,112 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-Install dependencies:
+Install the package in editable mode:
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
 
-> Current status: the tool uses only the Python standard library. The `requirements.txt` file is included to keep setup workflows consistent across local machines and CI systems.
+Install development dependencies for tests:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+> Runtime status: the CLI uses only the Python standard library. `pytest` is available through the optional `dev` extra for contributors.
+
+## PyPI Usage
+
+After installation, run the CLI directly:
+
+```bash
+python-code-doc-generator main.py
+```
+
+Generate Markdown documentation:
+
+```bash
+python-code-doc-generator main.py --language en --output generated-docs.md
+```
+
+Generate JSON documentation:
+
+```bash
+python-code-doc-generator main.py --format json --language en --output generated-docs.json
+```
+
+Check the installed version:
+
+```bash
+python-code-doc-generator --version
+```
+
+You can still run the tool from source during development:
+
+```bash
+python main.py main.py --language en
+```
 
 ## Quick Start
 
 Generate Markdown documentation for a single file:
 
 ```bash
-python main.py path/to/module.py
+python-code-doc-generator main.py
 ```
 
 Generate Markdown documentation for a project directory:
 
 ```bash
-python main.py path/to/project --output FUNCTION_DOCS.md
+python-code-doc-generator . --output FUNCTION_DOCS.md
 ```
 
 Generate English documentation:
 
 ```bash
-python main.py path/to/project --language en --output FUNCTION_DOCS.md
+python-code-doc-generator . --language en --output FUNCTION_DOCS.md
 ```
 
 Generate JSON for automation:
 
 ```bash
-python main.py path/to/project --format json --output function-docs.json
+python-code-doc-generator . --format json --output function-docs.json
 ```
 
 Include private functions:
 
 ```bash
-python main.py path/to/project --include-private
+python-code-doc-generator . --include-private
 ```
 
 Fail the command when no functions are discovered:
 
 ```bash
-python main.py path/to/project --fail-on-empty
+python-code-doc-generator . --fail-on-empty
 ```
 
 Fail the command when a Python file cannot be parsed:
 
 ```bash
-python main.py path/to/project --strict
+python-code-doc-generator . --strict
+```
+
+## Testing
+
+Install the development extra and run the test suite:
+
+```bash
+python -m pip install -e ".[dev]"
+python -m pytest
+```
+
+Run the same smoke checks used by CI:
+
+```bash
+python -m py_compile main.py
+python-code-doc-generator --version
+python-code-doc-generator main.py --language en --strict --fail-on-empty --output generated-docs.md
+python-code-doc-generator main.py --format json --language en --strict --fail-on-empty --output generated-docs.json
 ```
 
 ## CI/CD Usage
@@ -126,9 +190,11 @@ A typical CI pipeline can perform the following checks:
 Example:
 
 ```bash
+python -m pip install -e ".[dev]"
 python -m py_compile main.py
-python main.py . --strict --fail-on-empty --output generated-docs.md
-python main.py . --format json --strict --fail-on-empty --output generated-docs.json
+python -m pytest
+python-code-doc-generator . --strict --fail-on-empty --output generated-docs.md
+python-code-doc-generator . --format json --strict --fail-on-empty --output generated-docs.json
 ```
 
 ### Pull Request Validation
@@ -136,7 +202,7 @@ python main.py . --format json --strict --fail-on-empty --output generated-docs.
 For pull requests, teams can run:
 
 ```bash
-python main.py src --strict --fail-on-empty --output docs/generated-functions.md
+python-code-doc-generator . --strict --fail-on-empty --output docs/generated-functions.md
 ```
 
 This gives maintainers a generated view of the changed codebase and helps reviewers notice undocumented or difficult-to-understand functions before merge.
@@ -210,7 +276,7 @@ This format is intentionally readable in pull requests, release notes, documenta
 ## Command Reference
 
 ```text
-python main.py PATH [options]
+python-code-doc-generator PATH [options]
 ```
 
 | Option | Description |
@@ -234,10 +300,16 @@ python main.py PATH [options]
 |-- .github/
 |   `-- workflows/
 |       `-- python-test.yml
+|-- tests/
+|   |-- test_cli.py
+|   |-- test_parser.py
+|   `-- test_renderers.py
 |-- main.py
+|-- pyproject.toml
 |-- requirements.txt
 |-- README.md
 |-- CONTRIBUTING.md
+|-- screenshot.png
 `-- LICENSE
 ```
 
@@ -251,8 +323,8 @@ This roadmap directly supports the long-term goal of turning python-code-doc-gen
 
 ## Roadmap
 
-- Add unit tests for parser and renderer behavior.
-- Add package metadata through `pyproject.toml`.
+- Add unit tests for parser and renderer behavior. **Completed.**
+- Add package metadata through `pyproject.toml`. **Completed.**
 - Support configurable Markdown templates.
 - Add class-level and module-level documentation sections.
 - Add documentation coverage scoring.

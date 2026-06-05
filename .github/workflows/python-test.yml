@@ -40,16 +40,22 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -e ".[dev]"
 
       - name: Compile source
         run: python -m py_compile main.py
 
+      - name: Run unit tests
+        run: python -m pytest
+
+      - name: Check installed CLI
+        run: python-code-doc-generator --version
+
       - name: Generate Markdown documentation
-        run: python main.py main.py --language en --strict --fail-on-empty --output generated-docs.md
+        run: python-code-doc-generator main.py --language en --strict --fail-on-empty --output generated-docs.md
 
       - name: Generate JSON documentation
-        run: python main.py main.py --format json --language en --strict --fail-on-empty --output generated-docs.json
+        run: python-code-doc-generator main.py --format json --language en --strict --fail-on-empty --output generated-docs.json
 
       - name: Validate JSON output
         run: |
