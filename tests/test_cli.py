@@ -89,4 +89,4 @@ def test_console_version_entrypoint_after_install() -> None:
     )
 
     assert result.returncode == 0
-    assert "Python Code Doc-Generator 0.2.0" in result.stdout
+    assert "Python Code Doc-Generator 0.3.0" in result.stdout

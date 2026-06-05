@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-code-doc-generator"
-version = "0.2.0"
+version = "0.3.0"
 description = "A lightweight Python CLI that generates function-level documentation from static code analysis."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
   { name = "python-code-doc-generator contributors" }
 ]
@@ -24,7 +25,6 @@ classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
@@ -37,7 +37,10 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.0"
+  "build>=1.2",
+  "pytest>=8.0",
+  "tomli>=2.0; python_version < '3.11'",
+  "twine>=5.0"
 ]
 
 [project.scripts]
@@ -49,7 +52,7 @@ Repository = "https://github.com/nyks-jpg/python-code-doc-generator"
 Issues = "https://github.com/nyks-jpg/python-code-doc-generator/issues"
 
 [tool.setuptools]
-py-modules = ["main"]
+py-modules = ["main", "doc_providers"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

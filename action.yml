@@ -1,0 +1,109 @@
+name: python-code-doc-generator
+description: Generate Python function documentation, coverage, and PR documentation checks.
+author: python-code-doc-generator contributors
+
+branding:
+  icon: file-text
+  color: blue
+
+inputs:
+  path:
+    description: Python file or directory to scan.
+    required: false
+    default: "."
+  format:
+    description: Output format. Use markdown or json.
+    required: false
+    default: "markdown"
+  output:
+    description: Output file path for generated documentation.
+    required: false
+    default: "generated-docs.md"
+  language:
+    description: Documentation language. Use en or tr.
+    required: false
+    default: "en"
+  coverage:
+    description: Include documentation coverage metrics.
+    required: false
+    default: "true"
+  diff-base:
+    description: Optional git base ref for diff-aware PR analysis.
+    required: false
+    default: ""
+  diff-head:
+    description: Git head ref for diff-aware PR analysis.
+    required: false
+    default: "HEAD"
+  strict:
+    description: Fail if any scanned Python file cannot be parsed.
+    required: false
+    default: "true"
+  fail-on-empty:
+    description: Fail if no functions are discovered.
+    required: false
+    default: "true"
+  fail-on-doc-issues:
+    description: Fail when diff-aware analysis finds missing docstrings or return annotations.
+    required: false
+    default: "true"
+  include-private:
+    description: Include functions whose names start with an underscore.
+    required: false
+    default: "false"
+  python-version:
+    description: Python version used to run the action.
+    required: false
+    default: "3.12"
+
+outputs:
+  output-file:
+    description: Path to the generated output file.
+    value: ${{ steps.run.outputs.output-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install python-code-doc-generator
+      shell: bash
+      run: python -m pip install "$GITHUB_ACTION_PATH"
+
+    - name: Run python-code-doc-generator
+      id: run
+      shell: bash
+      run: |
+        args=(
+          "${{ inputs.path }}"
+          "--format" "${{ inputs.format }}"
+          "--language" "${{ inputs.language }}"
+        )
+
+        if [ -n "${{ inputs.output }}" ]; then
+          args+=("--output" "${{ inputs.output }}")
+        fi
+        if [ "${{ inputs.coverage }}" = "true" ]; then
+          args+=("--coverage")
+        fi
+        if [ -n "${{ inputs.diff-base }}" ]; then
+          args+=("--diff-base" "${{ inputs.diff-base }}" "--diff-head" "${{ inputs.diff-head }}")
+        fi
+        if [ "${{ inputs.strict }}" = "true" ]; then
+          args+=("--strict")
+        fi
+        if [ "${{ inputs.fail-on-empty }}" = "true" ]; then
+          args+=("--fail-on-empty")
+        fi
+        if [ "${{ inputs.fail-on-doc-issues }}" != "true" ]; then
+          args+=("--no-fail-on-doc-issues")
+        fi
+        if [ "${{ inputs.include-private }}" = "true" ]; then
+          args+=("--include-private")
+        fi
+
+        python-code-doc-generator "${args[@]}"
+        echo "output-file=${{ inputs.output }}" >> "$GITHUB_OUTPUT"

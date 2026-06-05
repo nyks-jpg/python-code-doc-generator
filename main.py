@@ -19,7 +19,7 @@ from typing import Iterable, Sequence
 
 
 APP_NAME = "Python Code Doc-Generator"
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0"
 
 
 class AppError(Exception):
@@ -75,6 +75,9 @@ class DiffAnalysis:
     changed_functions: int
     documented_functions: int
     missing_docstrings: int
+    missing_return_annotations: int
+    missing_docstring_functions: list[str]
+    missing_return_annotation_functions: list[str]
     warnings: list[str]
 
 
@@ -148,6 +151,15 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         "--diff-head",
         default="HEAD",
         help="Git head ref for diff-aware analysis. Default: HEAD.",
+    )
+    parser.add_argument(
+        "--no-fail-on-doc-issues",
+        dest="fail_on_doc_issues",
+        action="store_false",
+        help=(
+            "Do not return a non-zero exit code when diff-aware analysis "
+            "finds missing docstrings or return annotations."
+        ),
     )
     parser.add_argument(
         "--version",
@@ -421,17 +433,29 @@ def calculate_diff_analysis(
         if function_overlaps_changed_ranges(item, changed_ranges, repo_root)
     ]
     documented = sum(1 for item in changed_functions if item.docstring)
-    warnings = [
+    missing_docstrings = [
         f"{item.qualified_name}()"
         for item in changed_functions
         if not item.docstring
+    ]
+    missing_return_annotations = [
+        f"{item.qualified_name}()"
+        for item in changed_functions
+        if not item.returns
+    ]
+    warnings = [
+        *(f"Missing docstring: {name}" for name in missing_docstrings),
+        *(f"Missing return annotation: {name}" for name in missing_return_annotations),
     ]
     return DiffAnalysis(
         base_ref=base_ref,
         head_ref=head_ref,
         changed_functions=len(changed_functions),
         documented_functions=documented,
-        missing_docstrings=len(warnings),
+        missing_docstrings=len(missing_docstrings),
+        missing_return_annotations=len(missing_return_annotations),
+        missing_docstring_functions=missing_docstrings,
+        missing_return_annotation_functions=missing_return_annotations,
         warnings=warnings,
     )
 
@@ -465,14 +489,30 @@ def diff_analysis_lines(analysis: DiffAnalysis) -> list[str]:
         f"Changed Functions: {analysis.changed_functions}",
         f"Documented: {analysis.documented_functions}",
         f"Missing Docstrings: {analysis.missing_docstrings}",
+        f"Missing Return Annotations: {analysis.missing_return_annotations}",
         "",
         "Warnings:",
     ]
-    if analysis.warnings:
-        lines.extend(f"* {name}" for name in analysis.warnings)
-    else:
+    if not analysis.warnings:
         lines.append("None")
+        return lines
+
+    if analysis.missing_docstring_functions:
+        lines.append("Missing docstrings:")
+        lines.extend(f"* {name}" for name in analysis.missing_docstring_functions)
+    if analysis.missing_return_annotation_functions:
+        lines.append("Missing return annotations:")
+        lines.extend(f"* {name}" for name in analysis.missing_return_annotation_functions)
     return lines
+
+
+def diff_analysis_has_failures(analysis: DiffAnalysis) -> bool:
+    """Return whether diff-aware documentation requirements failed."""
+
+    return (
+        analysis.missing_docstrings > 0
+        or analysis.missing_return_annotations > 0
+    )
 
 
 def extract_parameters(args: ast.arguments) -> list[ParameterDoc]:
@@ -1095,6 +1135,13 @@ def run(argv: Sequence[str]) -> int:
     write_output(content, args.output)
     if args.output is not None or args.format == "json":
         print_terminal_report(coverage, diff_analysis)
+    if (
+        diff_analysis
+        and args.fail_on_doc_issues
+        and diff_analysis_has_failures(diff_analysis)
+    ):
+        print("Documentation requirements failed.", file=sys.stderr)
+        return 4
     return 0 if not parse_errors else 1
 
 

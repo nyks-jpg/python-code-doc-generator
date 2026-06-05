@@ -17,6 +17,8 @@
 - Markdown documentation generation
 - JSON export
 - Documentation coverage reporting
+- Diff-aware pull request documentation checks
+- Reusable GitHub Action
 - CI/CD friendly
 - Offline by default
 - No external API required
@@ -110,6 +112,9 @@ python-code-doc-generator . --strict
 - Export JSON for automation, dashboards, or downstream processing.
 - Calculate docstring-based documentation coverage with `--coverage`.
 - Analyze documentation status for changed pull request functions with `--diff-base`.
+- Report missing return annotations in pull request documentation checks.
+- Fail CI when changed functions do not meet documentation requirements.
+- Run as a reusable GitHub Action through `action.yml`.
 - Support CI-oriented flags such as `--strict` and `--fail-on-empty`.
 
 ## Documentation Coverage
@@ -187,7 +192,7 @@ jobs:
 
       - name: Run diff-aware PR documentation analysis
         if: github.event_name == 'pull_request'
-        run: python-code-doc-generator . --coverage --diff-base origin/${{ github.base_ref }} --language en --strict --fail-on-empty --output pr-doc-analysis.md
+        run: python-code-doc-generator main.py --coverage --diff-base origin/${{ github.base_ref }} --language en --strict --fail-on-empty --output pr-doc-analysis.md
 
       - name: Upload documentation artifacts
         uses: actions/upload-artifact@v4
@@ -198,6 +203,55 @@ jobs:
             generated-docs.md
             generated-docs.json
             pr-doc-analysis.md
+```
+
+## Reusable GitHub Action
+
+This repository can also be used directly as a GitHub Action.
+
+```yaml
+name: Documentation Quality
+
+on:
+  pull_request:
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate documentation report
+        uses: nyks-jpg/python-code-doc-generator@main
+        with:
+          path: "."
+          format: "markdown"
+          output: "pr-doc-analysis.md"
+          coverage: "true"
+          diff-base: "origin/${{ github.base_ref }}"
+          fail-on-doc-issues: "true"
+
+      - name: Upload documentation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-doc-analysis
+          path: pr-doc-analysis.md
+```
+
+JSON output is supported by setting `format: "json"` and changing the output file extension:
+
+```yaml
+      - name: Generate JSON documentation report
+        uses: nyks-jpg/python-code-doc-generator@main
+        with:
+          path: "."
+          format: "json"
+          output: "function-docs.json"
+          coverage: "true"
 ```
 
 ## Enterprise Advantages
@@ -216,6 +270,9 @@ jobs:
 - Add class-level and module-level documentation sections.
 - Add documentation coverage scoring. **Completed.**
 - Add diff-aware pull request reporting. **Completed.**
+- Add reusable GitHub Action support. **Completed.**
+- Add PyPI release build and validation workflow. **Completed.**
+- Add provider interface for future AI integrations. **Completed.**
 - Add optional integration with LLM providers for richer natural language summaries.
 - Add pre-commit hook examples.
 - Publish the tool to PyPI.
@@ -311,6 +368,32 @@ You can still run the tool from source during development:
 python main.py main.py --language en
 ```
 
+## PyPI Release Preparation
+
+The project includes package metadata in `pyproject.toml` and a release checklist in `docs/RELEASE.md`.
+
+Versioning follows semantic versioning:
+
+- Patch releases fix bugs without changing CLI behavior.
+- Minor releases add backward-compatible CLI flags, output fields, or automation features.
+- Major releases may change output schemas, default CI behavior, or supported Python versions.
+
+Build and validate release artifacts locally:
+
+```bash
+python -m pip install -e ".[dev]"
+python -m pytest
+python -m build
+python -m twine check dist/*
+```
+
+After publishing to PyPI, users can install the package with:
+
+```bash
+python -m pip install python-code-doc-generator
+python-code-doc-generator --version
+```
+
 ## Testing
 
 Install the development extra and run the test suite:
@@ -387,17 +470,24 @@ git fetch origin main
 python-code-doc-generator . --coverage --diff-base origin/main --diff-head HEAD --language en --output pr-doc-analysis.md
 ```
 
+By default, diff-aware analysis returns a non-zero exit code when changed functions are missing docstrings or return annotations. Use `--no-fail-on-doc-issues` when you want report-only behavior.
+
 Example output:
 
 ```text
 Changed Functions: 8
 Documented: 5
 Missing Docstrings: 3
+Missing Return Annotations: 2
 
 Warnings:
+Missing docstrings:
 * process_payment()
 * validate_order()
 * create_invoice()
+Missing return annotations:
+* calculate_total()
+* send_receipt()
 ```
 
 This mode is designed for GitHub Actions and other CI systems where reviewers need a compact documentation quality signal for the current pull request.
@@ -426,9 +516,13 @@ Undocumented Functions: 1
 Changed Functions: 3
 Documented: 2
 Missing Docstrings: 1
+Missing Return Annotations: 1
 
 Warnings:
+Missing docstrings:
 * InvoiceService.validate_order()
+Missing return annotations:
+* calculate_invoice_total()
 ```
 
 ## `services/invoice_service.py`
@@ -489,6 +583,7 @@ python-code-doc-generator PATH [options]
 | `--coverage` | Include docstring coverage metrics in Markdown, JSON, and CI logs. |
 | `--diff-base REF` | Analyze documentation status for functions changed between `REF` and `--diff-head`. |
 | `--diff-head REF` | Git head ref for diff-aware analysis. Default: `HEAD`. |
+| `--no-fail-on-doc-issues` | Keep diff-aware analysis in report-only mode even when documentation issues are found. |
 | `--version` | Print the tool version. |
 
 ## Competitive Positioning
@@ -512,11 +607,17 @@ The goal is to complement documentation platforms, not compete with them.
 |       `-- python-test.yml
 |-- assets/
 |   `-- python-code-doc-generator-demo.gif
+|-- docs/
+|   `-- RELEASE.md
 |-- tests/
 |   |-- test_cli.py
+|   |-- test_doc_providers.py
 |   |-- test_diff_analysis.py
+|   |-- test_packaging.py
 |   |-- test_parser.py
 |   `-- test_renderers.py
+|-- action.yml
+|-- doc_providers.py
 |-- main.py
 |-- pyproject.toml
 |-- requirements.txt
@@ -526,11 +627,29 @@ The goal is to complement documentation platforms, not compete with them.
 `-- LICENSE
 ```
 
+## AI-Ready Architecture
+
+The current engine remains fully static and offline. Future AI integrations are prepared through `doc_providers.py`, which defines a small provider interface for documentation generation backends.
+
+Current provider:
+
+- `StaticAnalysisProvider`: preserves the deterministic summary and detail output generated from Python AST metadata.
+
+Future providers can implement the same interface for:
+
+- OpenAI-powered function intent analysis,
+- organization-specific documentation style guides,
+- richer summaries for internal developer portals,
+- pull request documentation suggestions.
+
+This keeps the parser, Markdown renderer, JSON renderer, and CI behavior stable while leaving a clean extension point for LLM-backed documentation.
+
 ## OpenAI Integration Roadmap
 
 - **Phase 1:** Stability of the current static analysis engine. **Completed.**
-- **Phase 2:** AI-assisted documentation generation with OpenAI API integration to understand function intent. **Planned.**
-- **Phase 3:** GitHub App support that automatically comments documentation suggestions directly on Pull Requests. **Planned.**
+- **Phase 2:** Provider abstraction for future AI-assisted documentation generation. **Completed.**
+- **Phase 3:** OpenAI API integration to understand function intent. **Planned.**
+- **Phase 4:** GitHub App support that automatically comments documentation suggestions directly on Pull Requests. **Planned.**
 
 This roadmap directly supports the long-term goal of turning python-code-doc-generator into an intelligent documentation assistant for open source and enterprise repositories.
 

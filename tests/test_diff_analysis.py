@@ -1,9 +1,11 @@
 from pathlib import Path
+import subprocess
 
 from main import (
     calculate_diff_analysis,
     collect_functions,
     parse_changed_line_ranges,
+    run,
 )
 
 
@@ -34,13 +36,17 @@ def documented() -> str:
     """Return a documented value."""
     return "ok"
 
-def missing() -> str:
+def missing_docstring() -> str:
     return "missing"
+
+def missing_return():
+    """Return a value without an annotation."""
+    return "missing annotation"
 '''.strip(),
         encoding="utf-8",
     )
     docs = collect_functions(source, include_private=False, language="en")
-    changed_ranges = {"sample.py": [(1, 7)]}
+    changed_ranges = {"sample.py": [(1, 11)]}
 
     analysis = calculate_diff_analysis(
         docs,
@@ -50,7 +56,56 @@ def missing() -> str:
         head_ref="HEAD",
     )
 
-    assert analysis.changed_functions == 2
-    assert analysis.documented_functions == 1
+    assert analysis.changed_functions == 3
+    assert analysis.documented_functions == 2
     assert analysis.missing_docstrings == 1
-    assert analysis.warnings == ["missing()"]
+    assert analysis.missing_return_annotations == 1
+    assert analysis.missing_docstring_functions == ["missing_docstring()"]
+    assert analysis.missing_return_annotation_functions == ["missing_return()"]
+    assert analysis.warnings == [
+        "Missing docstring: missing_docstring()",
+        "Missing return annotation: missing_return()",
+    ]
+
+
+def test_cli_diff_analysis_fails_on_documentation_issues(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=tmp_path,
+        check=True,
+    )
+    source = tmp_path / "sample.py"
+    source.write_text(
+        '''
+def documented() -> str:
+    """Return a documented value."""
+    return "ok"
+'''.strip(),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "sample.py"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "base"], cwd=tmp_path, check=True)
+
+    source.write_text(
+        '''
+def documented() -> str:
+    """Return a documented value."""
+    return "ok"
+
+def added_without_docs():
+    return "missing"
+'''.strip(),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "sample.py"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add undocumented"], cwd=tmp_path, check=True)
+
+    exit_code = run([str(tmp_path), "--diff-base", "HEAD~1", "--language", "en"])
+
+    assert exit_code == 4
