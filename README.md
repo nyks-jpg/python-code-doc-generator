@@ -5,7 +5,21 @@
 [![Python Test](https://github.com/nyks-jpg/python-code-doc-generator/actions/workflows/python-test.yml/badge.svg)](https://github.com/nyks-jpg/python-code-doc-generator/actions/workflows/python-test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-![Proje Çıktısı](screenshot.png)
+<p align="center">
+  <img src="./assets/python-code-doc-generator-demo.gif"
+       alt="python-code-doc-generator demo"
+       width="950">
+</p>
+
+<p align="center"><strong>Generate documentation and measure documentation coverage from Python source code in seconds.</strong></p>
+
+- Static analysis with Python AST
+- Markdown documentation generation
+- JSON export
+- Documentation coverage reporting
+- CI/CD friendly
+- Offline by default
+- No external API required
 
 **python-code-doc-generator** is a lightweight, CI-friendly command-line tool that scans Python source files, extracts function-level metadata, and generates clean Markdown or JSON documentation from static analysis.
 
@@ -26,6 +40,64 @@ python-code-doc-generator helps teams:
 
 The first version intentionally uses only the Python standard library. It relies on `ast` for static analysis, which keeps the tool portable, fast, and safe for enterprise environments.
 
+## Quick Start
+
+Generate Markdown documentation for a single file:
+
+```bash
+python-code-doc-generator main.py
+```
+
+Generate Markdown documentation for a project directory:
+
+```bash
+python-code-doc-generator . --output FUNCTION_DOCS.md
+```
+
+Generate English documentation:
+
+```bash
+python-code-doc-generator . --language en --output FUNCTION_DOCS.md
+```
+
+Generate JSON for automation:
+
+```bash
+python-code-doc-generator . --format json --output function-docs.json
+```
+
+Generate documentation coverage metrics:
+
+```bash
+python-code-doc-generator . --coverage --output FUNCTION_DOCS.md
+python-code-doc-generator . --coverage --format json --output function-docs.json
+```
+
+Analyze only functions touched by a pull request diff:
+
+```bash
+git fetch origin main
+python-code-doc-generator . --coverage --diff-base origin/main --language en --output pr-doc-analysis.md
+```
+
+Include private functions:
+
+```bash
+python-code-doc-generator . --include-private
+```
+
+Fail the command when no functions are discovered:
+
+```bash
+python-code-doc-generator . --fail-on-empty
+```
+
+Fail the command when a Python file cannot be parsed:
+
+```bash
+python-code-doc-generator . --strict
+```
+
 ## Core Capabilities
 
 - Scan a single Python file or an entire directory.
@@ -36,7 +108,133 @@ The first version intentionally uses only the Python standard library. It relies
 - Generate readable summaries in Turkish or English.
 - Export Markdown for human readers.
 - Export JSON for automation, dashboards, or downstream processing.
+- Calculate docstring-based documentation coverage with `--coverage`.
+- Analyze documentation status for changed pull request functions with `--diff-base`.
 - Support CI-oriented flags such as `--strict` and `--fail-on-empty`.
+
+## Documentation Coverage
+
+Documentation coverage is available through the `--coverage` flag. A function is counted as documented when it contains a Python docstring. The metric is intentionally simple and deterministic, making it suitable for CI logs, generated Markdown reports, and JSON-based dashboards.
+
+Example command:
+
+```bash
+python-code-doc-generator . --coverage --language en --output generated-docs.md
+```
+
+Example terminal and Markdown summary:
+
+```text
+Documentation Coverage: 87%
+Total Functions: 200
+Documented Functions: 174
+Undocumented Functions: 26
+```
+
+JSON output includes the same signal under a top-level `coverage` field when `--coverage` is enabled:
+
+```json
+{
+  "coverage": {
+    "percentage": 87,
+    "total_functions": 200,
+    "documented_functions": 174,
+    "undocumented_functions": 26
+  },
+  "functions": []
+}
+```
+
+This signal is useful for pull request review, repository health dashboards, and long-running documentation improvement programs.
+
+## GitHub Actions Example
+
+The repository includes a working GitHub Actions workflow. The following minimal example shows how the CLI can be used in another Python project:
+
+```yaml
+name: Documentation Quality
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package and test tools
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest
+
+      - name: Generate Markdown documentation
+        run: python-code-doc-generator . --coverage --language en --strict --fail-on-empty --output generated-docs.md
+
+      - name: Generate JSON documentation
+        run: python-code-doc-generator . --coverage --format json --language en --strict --fail-on-empty --output generated-docs.json
+
+      - name: Run diff-aware PR documentation analysis
+        if: github.event_name == 'pull_request'
+        run: python-code-doc-generator . --coverage --diff-base origin/${{ github.base_ref }} --language en --strict --fail-on-empty --output pr-doc-analysis.md
+
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-docs
+          if-no-files-found: ignore
+          path: |
+            generated-docs.md
+            generated-docs.json
+            pr-doc-analysis.md
+```
+
+## Enterprise Advantages
+
+- **Offline by default:** source code is analyzed locally.
+- **No external API required:** suitable for private repositories and regulated environments.
+- **Deterministic output:** generated from the checked-out repository state.
+- **Small operational footprint:** no runtime service, database, or hosted dependency needed.
+- **Automation-ready:** machine-readable JSON and human-readable Markdown are both supported.
+
+## Roadmap
+
+- Add unit tests for parser and renderer behavior. **Completed.**
+- Add package metadata through `pyproject.toml`. **Completed.**
+- Support configurable Markdown templates.
+- Add class-level and module-level documentation sections.
+- Add documentation coverage scoring. **Completed.**
+- Add diff-aware pull request reporting. **Completed.**
+- Add optional integration with LLM providers for richer natural language summaries.
+- Add pre-commit hook examples.
+- Publish the tool to PyPI.
+
+## Contributing
+
+Contributions are welcome. The project is intentionally small and approachable, making it a good place to contribute improvements to CLI behavior, documentation generation, static analysis, and CI workflows.
+
+Recommended contribution areas:
+
+- parser accuracy,
+- Markdown and JSON output quality,
+- CI/CD examples,
+- documentation templates,
+- test coverage,
+- packaging improvements,
+- real-world examples from open source projects.
+
+Before opening a pull request, please read `CONTRIBUTING.md`.
 
 ## Installation
 
@@ -113,50 +311,6 @@ You can still run the tool from source during development:
 python main.py main.py --language en
 ```
 
-## Quick Start
-
-Generate Markdown documentation for a single file:
-
-```bash
-python-code-doc-generator main.py
-```
-
-Generate Markdown documentation for a project directory:
-
-```bash
-python-code-doc-generator . --output FUNCTION_DOCS.md
-```
-
-Generate English documentation:
-
-```bash
-python-code-doc-generator . --language en --output FUNCTION_DOCS.md
-```
-
-Generate JSON for automation:
-
-```bash
-python-code-doc-generator . --format json --output function-docs.json
-```
-
-Include private functions:
-
-```bash
-python-code-doc-generator . --include-private
-```
-
-Fail the command when no functions are discovered:
-
-```bash
-python-code-doc-generator . --fail-on-empty
-```
-
-Fail the command when a Python file cannot be parsed:
-
-```bash
-python-code-doc-generator . --strict
-```
-
 ## Testing
 
 Install the development extra and run the test suite:
@@ -171,8 +325,8 @@ Run the same smoke checks used by CI:
 ```bash
 python -m py_compile main.py
 python-code-doc-generator --version
-python-code-doc-generator main.py --language en --strict --fail-on-empty --output generated-docs.md
-python-code-doc-generator main.py --format json --language en --strict --fail-on-empty --output generated-docs.json
+python-code-doc-generator main.py --coverage --language en --strict --fail-on-empty --output generated-docs.md
+python-code-doc-generator main.py --coverage --format json --language en --strict --fail-on-empty --output generated-docs.json
 ```
 
 ## CI/CD Usage
@@ -188,7 +342,8 @@ A typical CI pipeline can perform the following checks:
 3. Run the documentation generator against the repository.
 4. Use `--strict` to fail on invalid Python files.
 5. Use `--fail-on-empty` to fail if no functions are discovered.
-6. Save Markdown or JSON output as a CI artifact.
+6. Use `--coverage` to expose function docstring coverage in CI logs.
+7. Save Markdown or JSON output as a CI artifact.
 
 Example:
 
@@ -196,8 +351,8 @@ Example:
 python -m pip install -e ".[dev]"
 python -m py_compile main.py
 python -m pytest
-python-code-doc-generator . --strict --fail-on-empty --output generated-docs.md
-python-code-doc-generator . --format json --strict --fail-on-empty --output generated-docs.json
+python-code-doc-generator . --coverage --strict --fail-on-empty --output generated-docs.md
+python-code-doc-generator . --coverage --format json --strict --fail-on-empty --output generated-docs.json
 ```
 
 ### Pull Request Validation
@@ -205,10 +360,11 @@ python-code-doc-generator . --format json --strict --fail-on-empty --output gene
 For pull requests, teams can run:
 
 ```bash
-python-code-doc-generator . --strict --fail-on-empty --output docs/generated-functions.md
+git fetch origin main
+python-code-doc-generator . --coverage --diff-base origin/main --strict --fail-on-empty --output docs/pr-doc-analysis.md
 ```
 
-This gives maintainers a generated view of the changed codebase and helps reviewers notice undocumented or difficult-to-understand functions before merge.
+This gives maintainers a generated view of the changed codebase and highlights newly added or modified functions that are missing docstrings before merge.
 
 ### Documentation Artifact Publishing
 
@@ -222,82 +378,58 @@ JSON output can also be consumed by:
 - onboarding portals,
 - documentation coverage checks.
 
-## Documentation Coverage
+## Diff-Aware Pull Request Analysis
 
-The project is designed to evolve beyond documentation generation into documentation quality measurement. A future coverage mode can summarize how much of a repository is documented at the function level and expose that result as CI output.
+Diff-aware analysis is available through `--diff-base`. It compares the requested base ref with `--diff-head` and reports documentation status only for functions whose source line range overlaps changed Python lines.
 
-Example coverage report:
+```bash
+git fetch origin main
+python-code-doc-generator . --coverage --diff-base origin/main --diff-head HEAD --language en --output pr-doc-analysis.md
+```
+
+Example output:
 
 ```text
-Documentation Coverage: 87%
-Total Functions: 200
-Documented Functions: 174
-Undocumented Functions: 26
+Changed Functions: 8
+Documented: 5
+Missing Docstrings: 3
+
+Warnings:
+* process_payment()
+* validate_order()
+* create_invoice()
 ```
 
-This kind of signal is useful for pull request review, repository health dashboards, and long-running documentation improvement programs.
-
-## GitHub Actions Example
-
-The repository includes a working GitHub Actions workflow. The following minimal example shows how the CLI can be used in another Python project:
-
-```yaml
-name: Documentation Quality
-
-on:
-  push:
-  pull_request:
-
-jobs:
-  docs:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install package and test tools
-        run: python -m pip install -e ".[dev]"
-
-      - name: Run tests
-        run: python -m pytest
-
-      - name: Generate Markdown documentation
-        run: python-code-doc-generator . --language en --strict --fail-on-empty --output generated-docs.md
-
-      - name: Generate JSON documentation
-        run: python-code-doc-generator . --format json --language en --strict --fail-on-empty --output generated-docs.json
-
-      - name: Upload documentation artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-docs
-          path: |
-            generated-docs.md
-            generated-docs.json
-```
-
-### Enterprise Advantages
-
-- **Offline by default:** source code is analyzed locally.
-- **No external API required:** suitable for private repositories and regulated environments.
-- **Deterministic output:** generated from the checked-out repository state.
-- **Small operational footprint:** no runtime service, database, or hosted dependency needed.
-- **Automation-ready:** machine-readable JSON and human-readable Markdown are both supported.
+This mode is designed for GitHub Actions and other CI systems where reviewers need a compact documentation quality signal for the current pull request.
 
 ## Output Example
 
 Below is a realistic Markdown output example generated for a Python service module.
 
-```markdown
+````markdown
 # Python Code Documentation
 
 _Generated by Python Code Doc-Generator through static analysis._
+
+## Documentation Coverage
+
+```text
+Documentation Coverage: 67%
+Total Functions: 3
+Documented Functions: 2
+Undocumented Functions: 1
+```
+
+## Diff-Aware Pull Request Analysis
+
+```text
+Changed Functions: 3
+Documented: 2
+Missing Docstrings: 1
+
+Warnings:
+* InvoiceService.validate_order()
+```
 
 ## `services/invoice_service.py`
 
@@ -332,7 +464,7 @@ _Generated by Python Code Doc-Generator through static analysis._
 - Analysis:
   - Accepts `items`, `tax_rate` as input.
   - Expected to return a value compatible with `Decimal`.
-```
+````
 
 This format is intentionally readable in pull requests, release notes, documentation portals, and local terminal output.
 
@@ -354,6 +486,9 @@ python-code-doc-generator PATH [options]
 | `--no-recursive` | Scan only top-level `.py` files in a directory. |
 | `--strict` | Fail if any scanned file cannot be parsed. |
 | `--fail-on-empty` | Fail if no functions are discovered. |
+| `--coverage` | Include docstring coverage metrics in Markdown, JSON, and CI logs. |
+| `--diff-base REF` | Analyze documentation status for functions changed between `REF` and `--diff-head`. |
+| `--diff-head REF` | Git head ref for diff-aware analysis. Default: `HEAD`. |
 | `--version` | Print the tool version. |
 
 ## Competitive Positioning
@@ -375,8 +510,11 @@ The goal is to complement documentation platforms, not compete with them.
 |-- .github/
 |   `-- workflows/
 |       `-- python-test.yml
+|-- assets/
+|   `-- python-code-doc-generator-demo.gif
 |-- tests/
 |   |-- test_cli.py
+|   |-- test_diff_analysis.py
 |   |-- test_parser.py
 |   `-- test_renderers.py
 |-- main.py
@@ -407,34 +545,6 @@ The long-term vision is to make function-level documentation measurable, reviewa
 - developer portal integrations.
 
 The current static analysis engine is the foundation for that workflow. Future OpenAI integration is expected to improve the quality of generated explanations while keeping deterministic static metadata available for automation.
-
-## Roadmap
-
-- Add unit tests for parser and renderer behavior. **Completed.**
-- Add package metadata through `pyproject.toml`. **Completed.**
-- Support configurable Markdown templates.
-- Add class-level and module-level documentation sections.
-- Add documentation coverage scoring.
-- Add diff-aware pull request reporting.
-- Add optional integration with LLM providers for richer natural language summaries.
-- Add pre-commit hook examples.
-- Publish the tool to PyPI.
-
-## Contributing
-
-Contributions are welcome. The project is intentionally small and approachable, making it a good place to contribute improvements to CLI behavior, documentation generation, static analysis, and CI workflows.
-
-Recommended contribution areas:
-
-- parser accuracy,
-- Markdown and JSON output quality,
-- CI/CD examples,
-- documentation templates,
-- test coverage,
-- packaging improvements,
-- real-world examples from open source projects.
-
-Before opening a pull request, please read `CONTRIBUTING.md`.
 
 ## Who Should Use This?
 

@@ -11,6 +11,7 @@ import argparse
 import ast
 import json
 import re
+import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -18,7 +19,7 @@ from typing import Iterable, Sequence
 
 
 APP_NAME = "Python Code Doc-Generator"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 
 
 class AppError(Exception):
@@ -53,6 +54,28 @@ class FunctionDoc:
     docstring: str | None
     summary: str
     details: list[str]
+
+
+@dataclass
+class CoverageSummary:
+    """Documentation coverage metrics for a scan."""
+
+    percentage: int
+    total_functions: int
+    documented_functions: int
+    undocumented_functions: int
+
+
+@dataclass
+class DiffAnalysis:
+    """Documentation status for functions touched by a git diff."""
+
+    base_ref: str
+    head_ref: str
+    changed_functions: int
+    documented_functions: int
+    missing_docstrings: int
+    warnings: list[str]
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -108,6 +131,23 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         "--fail-on-empty",
         action="store_true",
         help="Return a non-zero exit code when no functions are discovered.",
+    )
+    parser.add_argument(
+        "--coverage",
+        action="store_true",
+        help="Include function docstring coverage metrics in the output.",
+    )
+    parser.add_argument(
+        "--diff-base",
+        help=(
+            "Git base ref for diff-aware documentation analysis, "
+            "for example origin/main."
+        ),
+    )
+    parser.add_argument(
+        "--diff-head",
+        default="HEAD",
+        help="Git head ref for diff-aware analysis. Default: HEAD.",
     )
     parser.add_argument(
         "--version",
@@ -251,6 +291,188 @@ def collect_functions(path: Path, include_private: bool, language: str) -> list[
     collector = FunctionCollector(path, include_private=include_private, language=language)
     collector.visit(tree)
     return collector.functions
+
+
+def calculate_coverage(functions: Sequence[FunctionDoc]) -> CoverageSummary:
+    """Calculate function-level docstring coverage."""
+
+    total = len(functions)
+    documented = sum(1 for item in functions if item.docstring)
+    undocumented = total - documented
+    percentage = round((documented / total) * 100) if total else 0
+    return CoverageSummary(
+        percentage=percentage,
+        total_functions=total,
+        documented_functions=documented,
+        undocumented_functions=undocumented,
+    )
+
+
+def coverage_lines(summary: CoverageSummary) -> list[str]:
+    """Render coverage metrics as text lines."""
+
+    return [
+        f"Documentation Coverage: {summary.percentage}%",
+        f"Total Functions: {summary.total_functions}",
+        f"Documented Functions: {summary.documented_functions}",
+        f"Undocumented Functions: {summary.undocumented_functions}",
+    ]
+
+
+def resolve_git_root(path: Path) -> Path:
+    """Return the git repository root for a path."""
+
+    start_path = path if path.is_dir() else path.parent
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(start_path), "rev-parse", "--show-toplevel"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise AppError(
+            "Could not locate a git repository for diff-aware analysis."
+        ) from exc
+    return Path(result.stdout.strip()).resolve()
+
+
+def get_changed_line_ranges(
+    repo_root: Path,
+    base_ref: str,
+    head_ref: str,
+) -> dict[str, list[tuple[int, int]]]:
+    """Return changed new-file line ranges from a git diff."""
+
+    range_spec = f"{base_ref}...{head_ref}"
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "diff",
+                "--no-ext-diff",
+                "--unified=0",
+                "--diff-filter=AMR",
+                range_spec,
+                "--",
+                "*.py",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise AppError(
+            f"Could not compute git diff for {range_spec}. "
+            "Make sure the refs exist in the local checkout."
+        ) from exc
+    return parse_changed_line_ranges(result.stdout)
+
+
+def parse_changed_line_ranges(diff_text: str) -> dict[str, list[tuple[int, int]]]:
+    """Parse git unified diff hunks into changed new-file line ranges."""
+
+    ranges: dict[str, list[tuple[int, int]]] = {}
+    current_file: str | None = None
+    for line in diff_text.splitlines():
+        if line.startswith("+++ "):
+            current_file = parse_diff_new_file(line)
+            if current_file:
+                ranges.setdefault(current_file, [])
+            continue
+
+        if current_file and line.startswith("@@ "):
+            match = re.search(r"\+(\d+)(?:,(\d+))?", line)
+            if not match:
+                continue
+            start = int(match.group(1))
+            count = int(match.group(2) or "1")
+            if count == 0:
+                continue
+            ranges[current_file].append((start, start + count - 1))
+    return {path: items for path, items in ranges.items() if items}
+
+
+def parse_diff_new_file(line: str) -> str | None:
+    """Return a normalized new-file path from a git diff +++ line."""
+
+    marker = line[4:].strip()
+    if marker == "/dev/null":
+        return None
+    if marker.startswith("b/"):
+        marker = marker[2:]
+    return marker.replace("\\", "/")
+
+
+def calculate_diff_analysis(
+    functions: Sequence[FunctionDoc],
+    changed_ranges: dict[str, list[tuple[int, int]]],
+    repo_root: Path,
+    base_ref: str,
+    head_ref: str,
+) -> DiffAnalysis:
+    """Analyze documentation status for changed functions."""
+
+    changed_functions = [
+        item
+        for item in functions
+        if function_overlaps_changed_ranges(item, changed_ranges, repo_root)
+    ]
+    documented = sum(1 for item in changed_functions if item.docstring)
+    warnings = [
+        f"{item.qualified_name}()"
+        for item in changed_functions
+        if not item.docstring
+    ]
+    return DiffAnalysis(
+        base_ref=base_ref,
+        head_ref=head_ref,
+        changed_functions=len(changed_functions),
+        documented_functions=documented,
+        missing_docstrings=len(warnings),
+        warnings=warnings,
+    )
+
+
+def function_overlaps_changed_ranges(
+    function: FunctionDoc,
+    changed_ranges: dict[str, list[tuple[int, int]]],
+    repo_root: Path,
+) -> bool:
+    """Return whether a function overlaps changed diff lines."""
+
+    relative_path = relative_to_repo(Path(function.file), repo_root)
+    ranges = changed_ranges.get(relative_path, [])
+    function_end = function.end_line or function.line
+    return any(start <= function_end and end >= function.line for start, end in ranges)
+
+
+def relative_to_repo(path: Path, repo_root: Path) -> str:
+    """Return a POSIX path relative to the git repository root."""
+
+    try:
+        return path.resolve().relative_to(repo_root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def diff_analysis_lines(analysis: DiffAnalysis) -> list[str]:
+    """Render diff-aware analysis as text lines."""
+
+    lines = [
+        f"Changed Functions: {analysis.changed_functions}",
+        f"Documented: {analysis.documented_functions}",
+        f"Missing Docstrings: {analysis.missing_docstrings}",
+        "",
+        "Warnings:",
+    ]
+    if analysis.warnings:
+        lines.extend(f"* {name}" for name in analysis.warnings)
+    else:
+        lines.append("None")
+    return lines
 
 
 def extract_parameters(args: ast.arguments) -> list[ParameterDoc]:
@@ -602,15 +824,24 @@ def translate_kind(kind: str) -> str:
     return translations.get(kind, kind)
 
 
-def format_markdown(functions: Sequence[FunctionDoc], language: str) -> str:
+def format_markdown(
+    functions: Sequence[FunctionDoc],
+    language: str,
+    coverage: CoverageSummary | None = None,
+    diff_analysis: DiffAnalysis | None = None,
+) -> str:
     """Render collected documentation as Markdown."""
 
     if language == "tr":
-        return format_markdown_tr(functions)
-    return format_markdown_en(functions)
+        return format_markdown_tr(functions, coverage, diff_analysis)
+    return format_markdown_en(functions, coverage, diff_analysis)
 
 
-def format_markdown_tr(functions: Sequence[FunctionDoc]) -> str:
+def format_markdown_tr(
+    functions: Sequence[FunctionDoc],
+    coverage: CoverageSummary | None = None,
+    diff_analysis: DiffAnalysis | None = None,
+) -> str:
     """Render collected documentation as Turkish Markdown."""
 
     lines = [
@@ -619,6 +850,7 @@ def format_markdown_tr(functions: Sequence[FunctionDoc]) -> str:
         f"_Bu doküman {APP_NAME} tarafından statik analiz ile üretilmiştir._",
         "",
     ]
+    extend_report_sections(lines, coverage, diff_analysis)
 
     if not functions:
         lines.extend(["Fonksiyon bulunamadı.", ""])
@@ -653,7 +885,11 @@ def format_markdown_tr(functions: Sequence[FunctionDoc]) -> str:
     return "\n".join(lines)
 
 
-def format_markdown_en(functions: Sequence[FunctionDoc]) -> str:
+def format_markdown_en(
+    functions: Sequence[FunctionDoc],
+    coverage: CoverageSummary | None = None,
+    diff_analysis: DiffAnalysis | None = None,
+) -> str:
     """Render collected documentation as English Markdown."""
 
     lines = [
@@ -662,6 +898,7 @@ def format_markdown_en(functions: Sequence[FunctionDoc]) -> str:
         f"_Generated by {APP_NAME} through static analysis._",
         "",
     ]
+    extend_report_sections(lines, coverage, diff_analysis)
 
     if not functions:
         lines.extend(["No functions were found.", ""])
@@ -694,6 +931,24 @@ def format_markdown_en(functions: Sequence[FunctionDoc]) -> str:
                 lines.append(f"  - {detail}")
             lines.append("")
     return "\n".join(lines)
+
+
+def extend_report_sections(
+    lines: list[str],
+    coverage: CoverageSummary | None,
+    diff_analysis: DiffAnalysis | None,
+) -> None:
+    """Append optional CI-friendly report summaries to Markdown output."""
+
+    if coverage:
+        lines.extend(["## Documentation Coverage", "", "```text"])
+        lines.extend(coverage_lines(coverage))
+        lines.extend(["```", ""])
+
+    if diff_analysis:
+        lines.extend(["## Diff-Aware Pull Request Analysis", "", "```text"])
+        lines.extend(diff_analysis_lines(diff_analysis))
+        lines.extend(["```", ""])
 
 
 def render_markdown_parameters(parameters: Sequence[ParameterDoc], language: str) -> list[str]:
@@ -731,10 +986,24 @@ def format_line_range(line: int, end_line: int | None) -> str:
     return f"{line}-{end_line}"
 
 
-def format_json(functions: Sequence[FunctionDoc]) -> str:
+def format_json(
+    functions: Sequence[FunctionDoc],
+    coverage: CoverageSummary | None = None,
+    diff_analysis: DiffAnalysis | None = None,
+) -> str:
     """Render collected documentation as formatted JSON."""
 
-    return json.dumps([asdict(item) for item in functions], ensure_ascii=False, indent=2)
+    function_payload = [asdict(item) for item in functions]
+    if coverage is None and diff_analysis is None:
+        return json.dumps(function_payload, ensure_ascii=False, indent=2)
+
+    payload: dict[str, object] = {}
+    if coverage:
+        payload["coverage"] = asdict(coverage)
+    if diff_analysis:
+        payload["diff_analysis"] = asdict(diff_analysis)
+    payload["functions"] = function_payload
+    return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 def write_output(content: str, output: Path | None) -> None:
@@ -747,6 +1016,23 @@ def write_output(content: str, output: Path | None) -> None:
     destination = output.expanduser().resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(content, encoding="utf-8")
+
+
+def print_terminal_report(
+    coverage: CoverageSummary | None,
+    diff_analysis: DiffAnalysis | None,
+) -> None:
+    """Print CI-friendly summary lines without corrupting Markdown stdout."""
+
+    lines: list[str] = []
+    if coverage:
+        lines.extend(coverage_lines(coverage))
+    if diff_analysis:
+        if lines:
+            lines.append("")
+        lines.extend(diff_analysis_lines(diff_analysis))
+    if lines:
+        print("\n".join(lines), file=sys.stderr)
 
 
 def run(argv: Sequence[str]) -> int:
@@ -779,12 +1065,36 @@ def run(argv: Sequence[str]) -> int:
         print("No functions were discovered.", file=sys.stderr)
         return 3
 
+    coverage = calculate_coverage(all_functions) if args.coverage else None
+    diff_analysis = None
+    if args.diff_base:
+        repo_root = resolve_git_root(args.path.expanduser().resolve())
+        changed_ranges = get_changed_line_ranges(
+            repo_root,
+            base_ref=args.diff_base,
+            head_ref=args.diff_head,
+        )
+        diff_analysis = calculate_diff_analysis(
+            all_functions,
+            changed_ranges,
+            repo_root,
+            base_ref=args.diff_base,
+            head_ref=args.diff_head,
+        )
+
     if args.format == "json":
-        content = format_json(all_functions)
+        content = format_json(all_functions, coverage=coverage, diff_analysis=diff_analysis)
     else:
-        content = format_markdown(all_functions, language=args.language)
+        content = format_markdown(
+            all_functions,
+            language=args.language,
+            coverage=coverage,
+            diff_analysis=diff_analysis,
+        )
 
     write_output(content, args.output)
+    if args.output is not None or args.format == "json":
+        print_terminal_report(coverage, diff_analysis)
     return 0 if not parse_errors else 1
 
 

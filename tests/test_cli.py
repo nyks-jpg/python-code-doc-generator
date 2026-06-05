@@ -35,6 +35,42 @@ def test_cli_json_flag_writes_json_output(tmp_path: Path) -> None:
     assert payload[0]["name"] == "greet"
 
 
+def test_cli_coverage_writes_markdown_and_terminal_summary(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    source = tmp_path / "sample.py"
+    output = tmp_path / "docs.md"
+    source.write_text(
+        '''
+def documented() -> str:
+    """Return a documented value."""
+    return "ok"
+
+def undocumented() -> str:
+    return "missing"
+'''.strip(),
+        encoding="utf-8",
+    )
+
+    exit_code = run(
+        [
+            str(source),
+            "--coverage",
+            "--language",
+            "en",
+            "--output",
+            str(output),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    rendered = output.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "Documentation Coverage: 50%" in rendered
+    assert "Total Functions: 2" in captured.err
+
+
 def test_cli_fail_on_empty_returns_non_zero(tmp_path: Path) -> None:
     source = tmp_path / "empty.py"
     source.write_text("VALUE = 1\n", encoding="utf-8")
@@ -53,4 +89,4 @@ def test_console_version_entrypoint_after_install() -> None:
     )
 
     assert result.returncode == 0
-    assert "Python Code Doc-Generator 0.1.0" in result.stdout
+    assert "Python Code Doc-Generator 0.2.0" in result.stdout

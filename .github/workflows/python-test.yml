@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -52,10 +54,14 @@ jobs:
         run: python-code-doc-generator --version
 
       - name: Generate Markdown documentation
-        run: python-code-doc-generator main.py --language en --strict --fail-on-empty --output generated-docs.md
+        run: python-code-doc-generator main.py --coverage --language en --strict --fail-on-empty --output generated-docs.md
 
       - name: Generate JSON documentation
-        run: python-code-doc-generator main.py --format json --language en --strict --fail-on-empty --output generated-docs.json
+        run: python-code-doc-generator main.py --coverage --format json --language en --strict --fail-on-empty --output generated-docs.json
+
+      - name: Run diff-aware PR documentation analysis
+        if: github.event_name == 'pull_request'
+        run: python-code-doc-generator . --coverage --diff-base origin/${{ github.base_ref }} --language en --strict --fail-on-empty --output pr-doc-analysis.md
 
       - name: Validate JSON output
         run: |
@@ -63,8 +69,10 @@ jobs:
           import json
           from pathlib import Path
 
-          data = json.loads(Path("generated-docs.json").read_text(encoding="utf-8"))
-          assert isinstance(data, list), "JSON output must be a list"
+          payload = json.loads(Path("generated-docs.json").read_text(encoding="utf-8"))
+          assert "coverage" in payload, "JSON output must include coverage"
+          assert payload["coverage"]["total_functions"] >= 1
+          data = payload["functions"]
           assert data, "JSON output must include at least one function"
           required = {"file", "name", "qualified_name", "signature", "summary"}
           missing = required - set(data[0])
@@ -75,6 +83,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: generated-docs-python-${{ matrix.python-version }}
+          if-no-files-found: ignore
           path: |
             generated-docs.md
             generated-docs.json
+            pr-doc-analysis.md
