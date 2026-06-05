@@ -1,6 +1,9 @@
 # python-code-doc-generator
 
+[![Python Version](https://img.shields.io/pypi/pyversions/python-code-doc-generator.svg)](https://pypi.org/project/python-code-doc-generator/)
+[![PyPI Version](https://img.shields.io/pypi/v/python-code-doc-generator.svg)](https://pypi.org/project/python-code-doc-generator/)
 [![Python Test](https://github.com/nyks-jpg/python-code-doc-generator/actions/workflows/python-test.yml/badge.svg)](https://github.com/nyks-jpg/python-code-doc-generator/actions/workflows/python-test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ![Proje Çıktısı](screenshot.png)
 
@@ -219,6 +222,66 @@ JSON output can also be consumed by:
 - onboarding portals,
 - documentation coverage checks.
 
+## Documentation Coverage
+
+The project is designed to evolve beyond documentation generation into documentation quality measurement. A future coverage mode can summarize how much of a repository is documented at the function level and expose that result as CI output.
+
+Example coverage report:
+
+```text
+Documentation Coverage: 87%
+Total Functions: 200
+Documented Functions: 174
+Undocumented Functions: 26
+```
+
+This kind of signal is useful for pull request review, repository health dashboards, and long-running documentation improvement programs.
+
+## GitHub Actions Example
+
+The repository includes a working GitHub Actions workflow. The following minimal example shows how the CLI can be used in another Python project:
+
+```yaml
+name: Documentation Quality
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package and test tools
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest
+
+      - name: Generate Markdown documentation
+        run: python-code-doc-generator . --language en --strict --fail-on-empty --output generated-docs.md
+
+      - name: Generate JSON documentation
+        run: python-code-doc-generator . --format json --language en --strict --fail-on-empty --output generated-docs.json
+
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-docs
+          path: |
+            generated-docs.md
+            generated-docs.json
+```
+
 ### Enterprise Advantages
 
 - **Offline by default:** source code is analyzed locally.
@@ -293,6 +356,18 @@ python-code-doc-generator PATH [options]
 | `--fail-on-empty` | Fail if no functions are discovered. |
 | `--version` | Print the tool version. |
 
+## Competitive Positioning
+
+python-code-doc-generator is not intended to replace Sphinx, MkDocs, or Docusaurus. Those tools are excellent documentation publishing systems. This project operates earlier in the workflow as a static analysis and documentation quality automation layer.
+
+In practice, it can run before a documentation site is built:
+
+- Sphinx, MkDocs, or Docusaurus publish curated documentation.
+- python-code-doc-generator inspects Python code and produces function-level documentation signals.
+- CI pipelines can use those signals to create artifacts, detect missing documentation, or feed developer portal metadata.
+
+The goal is to complement documentation platforms, not compete with them.
+
 ## Repository Structure
 
 ```text
@@ -321,6 +396,18 @@ python-code-doc-generator PATH [options]
 
 This roadmap directly supports the long-term goal of turning python-code-doc-generator into an intelligent documentation assistant for open source and enterprise repositories.
 
+## Project Vision
+
+The long-term vision is to make function-level documentation measurable, reviewable, and easier to maintain in active Python repositories. The project is moving toward:
+
+- documentation coverage scoring,
+- diff-aware pull request reviews,
+- GitHub App support,
+- OpenAI-powered function intent analysis,
+- developer portal integrations.
+
+The current static analysis engine is the foundation for that workflow. Future OpenAI integration is expected to improve the quality of generated explanations while keeping deterministic static metadata available for automation.
+
 ## Roadmap
 
 - Add unit tests for parser and renderer behavior. **Completed.**
@@ -348,6 +435,18 @@ Recommended contribution areas:
 - real-world examples from open source projects.
 
 Before opening a pull request, please read `CONTRIBUTING.md`.
+
+## Who Should Use This?
+
+python-code-doc-generator is designed for teams and maintainers who want lightweight documentation automation without adopting a large documentation stack on day one.
+
+It is especially useful for:
+
+- open source maintainers,
+- platform teams,
+- internal developer experience teams,
+- Python library authors,
+- engineering managers.
 
 ## License
 
