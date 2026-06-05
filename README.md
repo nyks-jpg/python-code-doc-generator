@@ -1,5 +1,7 @@
 # python-code-doc-generator
 
+![Proje Çıktısı](screenshot.png)
+
 **python-code-doc-generator** is a lightweight, CI-friendly command-line tool that scans Python source files, extracts function-level metadata, and generates clean Markdown or JSON documentation from static analysis.
 
 The project is designed for open source maintainers, platform teams, internal developer experience groups, and engineering organizations that want documentation quality checks to become part of the normal delivery workflow.
@@ -238,6 +240,14 @@ python main.py PATH [options]
 |-- CONTRIBUTING.md
 `-- LICENSE
 ```
+
+## OpenAI Integration Roadmap
+
+- **Phase 1:** Stability of the current static analysis engine. **Completed.**
+- **Phase 2:** AI-assisted documentation generation with OpenAI API integration to understand function intent. **Planned.**
+- **Phase 3:** GitHub App support that automatically comments documentation suggestions directly on Pull Requests. **Planned.**
+
+This roadmap directly supports the long-term goal of turning python-code-doc-generator into an intelligent documentation assistant for open source and enterprise repositories.
 
 ## Roadmap
 
